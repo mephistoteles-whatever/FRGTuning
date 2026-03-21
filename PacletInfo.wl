@@ -4,6 +4,8 @@ Paclet[
   WolframVersion -> "13+",
   Description -> "Adaptive grid-search tuning helpers for FRG computations.",
   Creator -> "Fabian Wagner",
+  PrimaryContext -> "FRGTuning`",
+  License -> "MIT",
   Extensions -> {
     {"Kernel", Root -> ".", Context -> {"FRGTuning`"}}
   }
