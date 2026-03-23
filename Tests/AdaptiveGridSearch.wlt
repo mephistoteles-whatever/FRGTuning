@@ -105,7 +105,7 @@ VerificationTest[
     {0, 1},
     "TargetGridSizePerStep" -> 9
   ][],
-  "Error: No zero-crossing detected for at least one observable",
+  "Error: No zero-crossing detected for at least one observable. This can also mean that there is more than one zero crossing inside the interval. Try \"MultipleZeroCrossingsCheck1D\" -> True.",
   SameTest -> SameQ,
   TestID -> "AdaptiveGridSearch-no-zero-crossing"
 ]
@@ -492,4 +492,29 @@ VerificationTest[
   "plot2d",
   SameTest -> SameQ,
   TestID -> "AdaptiveGridSearch-verboseplot-message-outside-2d"
+]
+
+VerificationTest[
+  Module[{result},
+    result = AdaptiveGridSearch[
+      {
+        u'[t] == 0,
+        v'[t] == 0
+      },
+      {},
+      {},
+      {u, v},
+      {{0, 0}, {1, 1}},
+      {0, 1},
+      "TuningObservables" -> {u[t] - 1/3, v[t] - 2/3},
+      "TargetGridSizePerStep" -> 9,
+      "RelativeTolerance" -> 0.2,
+      "VerbosePlot" -> True,
+      WorkingPrecision -> 30
+    ][];
+    Norm[result[[1]] - {1/3, 2/3}] < 0.08
+  ],
+  True,
+  SameTest -> SameQ,
+  TestID -> "AdaptiveGridSearch-verboseplot-2d-executes"
 ]

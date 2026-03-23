@@ -37,6 +37,8 @@ AdaptiveGridSearch::lowprec =
   "Some inexact numeric inputs have precision below WorkingPrecision (`1`). Consider using exact numbers or higher-precision input.";
 AdaptiveGridSearch::multiple1d =
   "Detected `1` candidate zero crossings in the one-dimensional scan. Candidate brackets: `2`. Choose one bracket as the new tuning corridor and rerun with that.";
+AdaptiveGridSearch::nocrossing1d =
+  "Error: No zero-crossing detected for at least one observable. This can also mean that there is more than one zero crossing inside the interval. Try \"MultipleZeroCrossingsCheck1D\" -> True.";
 
 Options[AdaptiveGridSearch] = {
   "TimeVariable" -> t,
@@ -74,6 +76,7 @@ ClearAll[
   GridSearch,
   FindZeroCrossings,
   FindZeroBrackets1D,
+  VerbosePlotGraphic2D,
   LowPrecisionInexactReals,
   RaiseNumericPrecision,
   SampledPoints,
@@ -338,6 +341,66 @@ FindEdgesOfIntersection[
   ]
 ];
 
+VerbosePlotGraphic2D[
+  displayBound_,
+  corridorBound_,
+  gridData_,
+  zeroCrossings_,
+  samplePoints_,
+  spacing_,
+  epsilon_
+] := Module[
+  {colors, tubePlots, crossingPrimitives, rectangle},
+  colors = Table[ColorData[97][i], {i, Max[Length[zeroCrossings], 1]}];
+  tubePlots = Table[
+    RegionPlot[
+      Evaluate[InPointCloudQ[samplePoints[[i]], spacing, epsilon][{x, y}]],
+      {x, displayBound[[1, 1]], displayBound[[2, 1]]},
+      {y, displayBound[[1, 2]], displayBound[[2, 2]]},
+      PlotStyle -> Directive[Opacity[0.18], colors[[i]]],
+      BoundaryStyle -> None,
+      PlotPoints -> 30,
+      MaxRecursion -> 1,
+      PerformanceGoal -> "Quality"
+    ],
+    {i, Length[samplePoints]}
+  ];
+  crossingPrimitives = Flatten @ Table[
+    {
+      Directive[colors[[i]], AbsolutePointSize[6]],
+      Point[zeroCrossings[[i]]]
+    },
+    {i, Length[zeroCrossings]}
+  ];
+  rectangle = {
+    Directive[Black, Thick],
+    Line[{
+      {corridorBound[[1, 1]], corridorBound[[1, 2]]},
+      {corridorBound[[2, 1]], corridorBound[[1, 2]]},
+      {corridorBound[[2, 1]], corridorBound[[2, 2]]},
+      {corridorBound[[1, 1]], corridorBound[[2, 2]]},
+      {corridorBound[[1, 1]], corridorBound[[1, 2]]}
+    }]
+  };
+  Show[
+    Sequence @@ tubePlots,
+    Graphics[
+      {
+        Directive[GrayLevel[0.8], AbsolutePointSize[3]],
+        Point[gridData["Points"]],
+        crossingPrimitives,
+        rectangle
+      }
+    ],
+    Axes -> True,
+    PlotRange -> {
+      {displayBound[[1, 1]], displayBound[[2, 1]]},
+      {displayBound[[1, 2]], displayBound[[2, 2]]}
+    },
+    ImageSize -> Large
+  ]
+];
+
 (* Main wrapper. The function is curried so that the expensive structural inputs
    defining the flow are fixed once, and optional parameter substitutions can be
    injected later for repeated scans over the same model family. *)
@@ -387,6 +450,7 @@ AdaptiveGridSearch[
     signGrid,
     zeroCrossings,
     samplePoints,
+    currentPlot = Graphics[{}],
     relErrors = ConstantArray[Infinity, Length[hyperCubeBoundary[[1]]]],
     errors,
     error,
@@ -529,7 +593,7 @@ AdaptiveGridSearch[
       candidateBrackets = N[FindZeroBrackets1D[signGrid, gridData], workingPrecision];
 
       If[candidateBrackets === {},
-        Return["Error: No zero-crossing detected for at least one observable"]
+        Return[AdaptiveGridSearch::nocrossing1d]
       ];
 
       If[Length[candidateBrackets] > 1,
@@ -564,7 +628,7 @@ AdaptiveGridSearch[
     ];
 
     If[!EdgeCrossingQ[leftSign, rightSign],
-      Return["Error: No zero-crossing detected for at least one observable"]
+      Return[AdaptiveGridSearch::nocrossing1d]
     ];
 
     Do[
@@ -666,6 +730,18 @@ AdaptiveGridSearch[
           sharpgridpower
         ];
 
+        If[verbosePlot,
+          currentPlot = VerbosePlotGraphic2D[
+            oldbound,
+            If[bound[[1, 1]] === Infinity, oldbound, bound],
+            gridData,
+            zeroCrossings,
+            samplePoints,
+            spacing,
+            epsilon
+          ]
+        ];
+
         If[bound[[1, 1]] === Infinity,
           Throw[error[NoIntersection]]
         ];
@@ -699,15 +775,28 @@ AdaptiveGridSearch[
   );
 
   If[
-    verbose && TrueQ[$Notebooks],
+    (verbose || verbosePlot) && TrueQ[$Notebooks],
     Monitor[
       computation,
-      Row[{
-        "iteration: ",
-        Dynamic[iter],
-        " -- relative errors: ",
-        Dynamic[N[relErrors]]
-      }]
+      Column[
+        DeleteCases[
+          {
+            If[
+              verbose,
+              Row[{
+                "iteration: ",
+                Dynamic[iter],
+                " -- relative errors: ",
+                Dynamic[N[relErrors]]
+              }],
+              Nothing
+            ],
+            If[verbosePlot, Dynamic[currentPlot], Nothing]
+          },
+          Nothing
+        ],
+        Spacings -> 1
+      ]
     ],
     computation
   ];
