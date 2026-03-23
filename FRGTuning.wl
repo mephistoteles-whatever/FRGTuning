@@ -3,10 +3,28 @@
 BeginPackage["FRGTuning`"];
 
 AdaptiveGridSearch::usage =
-  "AdaptiveGridSearch[betaFunctions, nonTunedCouplings, fixedInitialConditions, tunedCouplings, hyperCubeBoundary, opts][parameters] tunes the initial values of tuned couplings so that the selected tuning observables hit a fixed point at the end of the flow. betaFunctions is the full list of flow equations, nonTunedCouplings names the couplings with fixed initial values, fixedInitialConditions supplies those fixed UV values, tunedCouplings names the UV parameters to be searched over, and hyperCubeBoundary = {{min1, ...}, {max1, ...}} specifies the search corridor. The returned function optionally accepts parameter replacement rules that are applied before solving.";
+  "AdaptiveGridSearch[betaFunctions, nonTunedCouplings, fixedInitialConditions, tunedCouplings, hyperCubeBoundary, timeRange, opts][parameters]\n\
+\n\
+Tunes the initial values of tunedCouplings so that the selected tuning observables reach a fixed point at the end of the flow.\n\
+\n\
+Arguments:\n\
+  betaFunctions          list of flow equations for all couplings\n\
+  nonTunedCouplings      names of couplings with fixed initial values\n\
+  fixedInitialConditions initial conditions for the non-tuned couplings\n\
+  tunedCouplings         names of couplings whose initial values are scanned\n\
+  hyperCubeBoundary      search corridor {{min1, ...}, {max1, ...}}\n\
+  timeRange              integration interval {tInitial, tFinal}\n\
+\n\
+Conventions:\n\
+  Couplings are given by name, for example m or g[4].\n\
+  Internally these are interpreted as time-dependent variables such as m[t] and g[4][t].\n\
+  By default the tuning observables are the tuned couplings themselves at final RG time.\n\
+\n\
+parameters:\n\
+  Optional replacement rules applied before solving, for example search[a -> 3/5].";
 
 AdaptiveGridSearch::timerange =
-  "Option \"TimeRange\" must be specified as {tInitial, tFinal}.";
+  "The time range must be specified as {tInitial, tFinal}.";
 AdaptiveGridSearch::shape =
   "The tuning corridor must be given as {{min1, min2, ...}, {max1, max2, ...}}.";
 AdaptiveGridSearch::tuned =
@@ -17,10 +35,11 @@ AdaptiveGridSearch::plot2d =
   "VerbosePlot is only supported for two tuned couplings.";
 AdaptiveGridSearch::lowprec =
   "Some inexact numeric inputs have precision below WorkingPrecision (`1`). Consider using exact numbers or higher-precision input.";
+AdaptiveGridSearch::multiple1d =
+  "Detected `1` candidate zero crossings in the one-dimensional scan. Candidate brackets: `2`. Choose one bracket as the new tuning corridor and rerun with that.";
 
 Options[AdaptiveGridSearch] = {
   "TimeVariable" -> t,
-  "TimeRange" -> Automatic,
   "TuningObservables" -> Automatic,
   "TargetGridSizePerStep" -> 100,
   "MaxIterations" -> 100,
@@ -33,6 +52,7 @@ Options[AdaptiveGridSearch] = {
   Method -> Automatic,
   "NDSolveAdditions" -> {},
   "NDSolveOptions" -> {},
+  "MultipleZeroCrossingsCheck1D" -> False,
   "Verbose" -> False,
   "VerbosePlot" -> False
 };
@@ -53,8 +73,9 @@ ClearAll[
   BuildIndexTuples,
   GridSearch,
   FindZeroCrossings,
-  FindZeroBracket1D,
+  FindZeroBrackets1D,
   LowPrecisionInexactReals,
+  RaiseNumericPrecision,
   SampledPoints,
   InPointCloudQ,
   InIntersectionQ,
@@ -125,10 +146,18 @@ GridPoints[hyperCubeBoundary_, targetGridSize_] := Module[
   |>
 ];
 
-(* Extract the final integration time from the InterpolatingFunction structure
-   returned by NDSolve. This indirect access is used for compatibility with kernels
-   where the modern domain-query interface is unavailable. *)
-finalTime[traj_] := traj[[1, 2, 0, 1, 1, 2]];
+(* Extract the final integration time from the first interpolating-function rule
+   returned by NDSolve. Prefer the documented domain query when available and fall
+   back to structural access only if necessary. *)
+finalTime[traj_] := Module[{ifun},
+  ifun = Last[First[traj]];
+  Quiet[
+    Check[
+      ifun["Domain"][[1, 2]],
+      ifun[[0, 1, 1, 2]]
+    ]
+  ]
+];
 
 (* Measure the relative width of the current search box in each direction. This is
    the convergence criterion for both the 1D bisection path and the multi-D search. *)
@@ -221,28 +250,26 @@ FindZeroCrossings[signGrid_, gridData_] := Module[
     {currentTuple, indexTuples}
   ];
 
-  DeleteDuplicates /@ crossingPoints
+DeleteDuplicates /@ crossingPoints
 ];
 
-(* Specialized 1D bracket detection. We first look for an exact zero on the scan
-   grid; if none exists, we return the first neighboring pair that changes sign. *)
-FindZeroBracket1D[signGrid_, gridData_] := Module[
-  {signs, points, zeroPos, crossingPos},
+(* Enumerate all candidate zero-crossing brackets on a 1D scan grid. Exact zero
+   hits are represented as degenerate brackets {x, x}; sign changes between
+   neighboring points yield ordinary brackets {xLeft, xRight}. *)
+FindZeroBrackets1D[signGrid_, gridData_] := Module[
+  {signs, points, brackets = {}, i},
   signs = Flatten[signGrid];
   points = Flatten[gridData["Points"]];
-  zeroPos = FirstPosition[signs, 0, Missing["NotFound"]];
-  If[zeroPos =!= Missing["NotFound"],
-    Return[{points[[zeroPos[[1]]]], points[[zeroPos[[1]]]]}]
+  Do[
+    If[signs[[i]] == 0,
+      AppendTo[brackets, {points[[i]], points[[i]]}]
+    ];
+    If[i < Length[signs] && EdgeCrossingQ[signs[[i]], signs[[i + 1]]] && signs[[i]] =!= 0 && signs[[i + 1]] =!= 0,
+      AppendTo[brackets, {points[[i]], points[[i + 1]]}]
+    ],
+    {i, Length[signs]}
   ];
-  crossingPos = FirstCase[
-    Range[Length[signs] - 1],
-    i_ /; EdgeCrossingQ[signs[[i]], signs[[i + 1]]],
-    Missing["NotFound"]
-  ];
-  If[crossingPos === Missing["NotFound"],
-    Missing["NotFound"],
-    {points[[crossingPos]], points[[crossingPos + 1]]}
-  ]
+  DeleteDuplicates[brackets]
 ];
 
 (* Collect inexact real numbers whose stored precision is below the requested
@@ -250,6 +277,18 @@ FindZeroBracket1D[signGrid_, gridData_] := Module[
 LowPrecisionInexactReals[expr_, workingPrecision_] := DeleteDuplicates @ Cases[
   Unevaluated[expr],
   x_Real /; Precision[x] < workingPrecision,
+  Infinity
+];
+
+(* Increase precision only on inexact numeric literals. This avoids corrupting
+   symbolic indexed couplings such as g[1] into g[1.] when preparing equations for
+   high-precision NDSolve runs. *)
+RaiseNumericPrecision[expr_, workingPrecision_] := Replace[
+  Unevaluated[expr],
+  {
+    x_Real :> SetPrecision[x, workingPrecision],
+    z_Complex /; Precision[z] =!= Infinity :> SetPrecision[z, workingPrecision]
+  },
   Infinity
 ];
 
@@ -308,11 +347,11 @@ AdaptiveGridSearch[
   fixedInitialConditions_List,
   tunedCouplings_List,
   hyperCubeBoundary_,
+  timeRange_,
   opts : OptionsPattern[]
 ][parameterRules_: {}] := Module[
   {
     timeVar,
-    timeRange,
     tInitial,
     tFinal,
     tuningObservables,
@@ -327,6 +366,7 @@ AdaptiveGridSearch[
     method,
     ndsolveAdditions,
     ndsolveOptions,
+    multipleZeroCrossingsCheck1D,
     verbose,
     verbosePlot,
     dim,
@@ -357,7 +397,7 @@ AdaptiveGridSearch[
     estimatederror,
     observableValue,
     signAt,
-    bracket,
+    candidateBrackets,
     left,
     right,
     leftSign,
@@ -367,7 +407,6 @@ AdaptiveGridSearch[
     lowPrecisionInputs
   },
   timeVar = OptionValue["TimeVariable"];
-  timeRange = OptionValue["TimeRange"];
   targetGridSizePerStep = OptionValue["TargetGridSizePerStep"];
   maxiter = OptionValue["MaxIterations"];
   reltol = OptionValue["RelativeTolerance"];
@@ -379,6 +418,7 @@ AdaptiveGridSearch[
   method = OptionValue[Method];
   ndsolveAdditions = OptionValue["NDSolveAdditions"];
   ndsolveOptions = OptionValue["NDSolveOptions"];
+  multipleZeroCrossingsCheck1D = OptionValue["MultipleZeroCrossingsCheck1D"];
   verbose = OptionValue["Verbose"];
   verbosePlot = OptionValue["VerbosePlot"];
 
@@ -458,10 +498,10 @@ AdaptiveGridSearch[
 
   flow[tunedValues_List] := flow[tunedValues] = NDSolve[
     Join[
-      SetPrecision[equationsTemplate, workingPrecision],
-      SetPrecision[fixedICTemplate, workingPrecision],
-      SetPrecision[tunedInitialConditions[tunedValues], workingPrecision],
-      SetPrecision[ndsolveAdditions, workingPrecision]
+      RaiseNumericPrecision[equationsTemplate, workingPrecision],
+      RaiseNumericPrecision[fixedICTemplate, workingPrecision],
+      RaiseNumericPrecision[tunedInitialConditions[tunedValues], workingPrecision],
+      RaiseNumericPrecision[ndsolveAdditions, workingPrecision]
     ],
     allCouplings,
     {timeVar, tInitial, tFinal},
@@ -477,27 +517,36 @@ AdaptiveGridSearch[
     First[observableTemplate /. traj /. timeVar -> finalTLocal]
   ];
 
-  (* The 1D case is handled separately: first find a sign-changing bracket on a
-     coarse scan, then refine it by ordinary bisection. This is cheaper and clearer
-     than running the full multidimensional point-cloud intersection logic. *)
+  (* The 1D case is handled separately with plain endpoint bracketing followed by
+     ordinary bisection. *)
   signAt[value_] := Sign[observableValue[{value}]];
 
   If[dim == 1,
-    bound = N[hyperCubeBoundary /. params, workingPrecision + 10];
-    gridData = GridPoints[bound, targetGridSizePerStep];
-    signGrid = GridSearch[gridData, flow, observableTemplate, timeVar];
+    If[multipleZeroCrossingsCheck1D,
+      bound = N[hyperCubeBoundary /. params, workingPrecision + 10];
+      gridData = GridPoints[bound, targetGridSizePerStep];
+      signGrid = GridSearch[gridData, flow, observableTemplate, timeVar];
+      candidateBrackets = N[FindZeroBrackets1D[signGrid, gridData], workingPrecision];
 
-    If[SameStrictSignQ[Flatten[signGrid]],
-      Return["Error: No zero-crossing detected for at least one observable"]
+      If[candidateBrackets === {},
+        Return["Error: No zero-crossing detected for at least one observable"]
+      ];
+
+      If[Length[candidateBrackets] > 1,
+        Return[
+          StringReplace[
+            AdaptiveGridSearch::multiple1d,
+            {
+              "`1`" -> ToString[Length[candidateBrackets]],
+              "`2`" -> ToString[InputForm[candidateBrackets]]
+            }
+          ]
+        ]
+      ];
+
+      {left, right} = candidateBrackets[[1]],
+      {left, right} = N[Flatten[hyperCubeBoundary /. params], workingPrecision]
     ];
-
-    bracket = FindZeroBracket1D[signGrid, gridData];
-
-    If[bracket === Missing["NotFound"],
-      Return["Error: No zero-crossing detected for at least one observable"]
-    ];
-
-    {left, right} = N[bracket, workingPrecision];
     leftSign = signAt[left];
     rightSign = signAt[right];
 
@@ -512,6 +561,10 @@ AdaptiveGridSearch[
         Print[N[estimatederror, workingPrecision]];
       ];
       Return[{mean, estimatederror}]
+    ];
+
+    If[!EdgeCrossingQ[leftSign, rightSign],
+      Return["Error: No zero-crossing detected for at least one observable"]
     ];
 
     Do[
@@ -534,13 +587,9 @@ AdaptiveGridSearch[
         mean = {mid};
         estimatederror = {0};
         If[verbose,
-          Print["Successful."];
-          Print["Mean:"];
-          Print[N[mean, workingPrecision]];
-          Print["Estimated error:"];
-          Print[N[estimatederror, workingPrecision]];
+          Print["Iteration ", iter, ": exact zero located at ", N[mid, workingPrecision], "."];
         ];
-        Return[{mean, estimatederror}]
+        Break[]
       ];
 
       If[EdgeCrossingQ[leftSign, midSign],
@@ -551,17 +600,20 @@ AdaptiveGridSearch[
       ];
 
       relErrors = RelativeBoxWidths[{{left}, {right}}];
+      If[verbose,
+        Print[
+          "Iteration ",
+          iter,
+          ": bracket = ",
+          N[{left, right}, workingPrecision],
+          ", relative errors = ",
+          N[relErrors, workingPrecision]
+        ];
+      ];
       If[AllTrue[relErrors, # < reltol &],
         mean = {(left + right)/2};
         estimatederror = {Abs[right - left]/2};
-        If[verbose,
-          Print["Successful."];
-          Print["Mean:"];
-          Print[N[mean, workingPrecision]];
-          Print["Estimated error:"];
-          Print[N[estimatederror, workingPrecision]];
-        ];
-        Return[{mean, estimatederror}]
+        Break[]
       ];
 
       If[iter == maxiter,
@@ -619,6 +671,16 @@ AdaptiveGridSearch[
         ];
 
         relErrors = RelativeBoxWidths[bound];
+        If[verbose,
+          Print[
+            "Iteration ",
+            iter,
+            ": bound = ",
+            N[bound, workingPrecision],
+            ", relative errors = ",
+            N[relErrors, workingPrecision]
+          ];
+        ];
 
         If[oldbound === bound,
           Throw[error[LowWorkPrec]]

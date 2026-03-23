@@ -78,6 +78,22 @@ VerificationTest[
 ]
 
 VerificationTest[
+  FRGTuning`Private`RaiseNumericPrecision[
+    {
+      g[1][t] == 0.1,
+      g[4][0] == -2
+    },
+    30
+  ],
+  {
+    g[1][t] == SetPrecision[0.1, 30],
+    g[4][0] == -2
+  },
+  SameTest -> SameQ,
+  TestID -> "RaiseNumericPrecision-preserves-coupling-indices"
+]
+
+VerificationTest[
   FRGTuning`Private`SpacingEqualNumberPointsInAllDirections[{{0, 0}, {2, 4}}, 16],
   {2/3, 4/3},
   SameTest -> SameQ,
@@ -262,45 +278,23 @@ VerificationTest[
 VerificationTest[
   Module[{gridData, signGrid},
     gridData = FRGTuning`Private`GridPoints[{{-1}, {1}}, 5];
-    signGrid = {{-1}, {-1}, {1}, {1}, {1}};
-    FRGTuning`Private`FindZeroBracket1D[signGrid, gridData]
+    signGrid = {{-1}, {-1}, {1}, {-1}, {1}};
+    FRGTuning`Private`FindZeroBrackets1D[signGrid, gridData]
   ],
-  {-1/2, 0},
+  {{-1/2, 0}, {0, 1/2}, {1/2, 1}},
   SameTest -> SameQ,
-  TestID -> "FindZeroBracket1D-sign-change"
+  TestID -> "FindZeroBrackets1D-multiple"
 ]
 
 VerificationTest[
   Module[{gridData, signGrid},
     gridData = FRGTuning`Private`GridPoints[{{-1}, {1}}, 5];
     signGrid = {{-1}, {-1}, {0}, {1}, {1}};
-    FRGTuning`Private`FindZeroBracket1D[signGrid, gridData]
+    FRGTuning`Private`FindZeroBrackets1D[signGrid, gridData]
   ],
-  {0, 0},
+  {{0, 0}},
   SameTest -> SameQ,
-  TestID -> "FindZeroBracket1D-zero-grid-point"
-]
-
-VerificationTest[
-  Module[{gridData, signGrid},
-    gridData = FRGTuning`Private`GridPoints[{{-1}, {1}}, 5];
-    signGrid = {{-1}, {-1}, {-1}, {1}, {1}};
-    FRGTuning`Private`FindZeroBracket1D[signGrid, gridData]
-  ],
-  {0, 1/2},
-  SameTest -> SameQ,
-  TestID -> "FindZeroBracket1D-later-sign-change"
-]
-
-VerificationTest[
-  Module[{gridData, signGrid},
-    gridData = FRGTuning`Private`GridPoints[{{-1}, {1}}, 5];
-    signGrid = {{-1}, {-1}, {-1}, {-1}, {-1}};
-    FRGTuning`Private`FindZeroBracket1D[signGrid, gridData]
-  ],
-  Missing["NotFound"],
-  SameTest -> SameQ,
-  TestID -> "FindZeroBracket1D-no-crossing"
+  TestID -> "FindZeroBrackets1D-exact-zero"
 ]
 
 VerificationTest[

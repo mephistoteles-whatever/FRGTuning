@@ -39,6 +39,7 @@ AdaptiveGridSearch[
   fixedInitialConditions,
   tunedCouplings,
   hyperCubeBoundary,
+  timeRange,
   opts
 ][parameters]
 ```
@@ -145,6 +146,22 @@ for one tuned coupling, or
 for two tuned couplings.
 
 ```wl
+timeRange
+```
+
+The integration interval, always written as
+
+```wl
+{tInitial, tFinal}
+```
+
+This is a required positional argument. Example:
+
+```wl
+{0, 1}
+```
+
+```wl
 parameters
 ```
 
@@ -179,12 +196,6 @@ search[<|a -> 3/5, b -> 2|>]
 ```
 
 The flow-time variable used in the equations.
-
-```wl
-"TimeRange" -> {tInitial, tFinal}
-```
-
-The RG interval over which the flow is integrated. This must always be specified.
 
 ```wl
 "TuningObservables" -> Automatic
@@ -226,7 +237,7 @@ search = AdaptiveGridSearch[
   },
   {m},
   {{0}, {1}},
-  "TimeRange" -> {0, 1},
+  {0, 1},
   "TuningObservables" -> {m[t] - 1/3}
 ];
 

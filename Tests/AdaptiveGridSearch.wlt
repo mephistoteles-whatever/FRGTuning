@@ -15,7 +15,8 @@ VerificationTest[
         {},
         {},
         {m},
-        {{-1}, {1}}
+        {{-1}, {1}},
+        Automatic
       ][],
       "timerange",
       AdaptiveGridSearch::timerange
@@ -36,7 +37,7 @@ VerificationTest[
         {},
         {m},
         {-1, 1},
-        "TimeRange" -> {0, 1}
+        {0, 1}
       ][],
       "shape",
       AdaptiveGridSearch::shape
@@ -60,7 +61,7 @@ VerificationTest[
         {},
         {m, x},
         {{-1}, {1}},
-        "TimeRange" -> {0, 1}
+        {0, 1}
       ][],
       "tuned",
       AdaptiveGridSearch::tuned
@@ -81,7 +82,7 @@ VerificationTest[
         {},
         {m},
         {{-1}, {1}},
-        "TimeRange" -> {0, 1},
+        {0, 1},
         "TuningObservables" -> {m[t], n[t]}
       ][],
       "observables",
@@ -101,7 +102,7 @@ VerificationTest[
     {},
     {m},
     {{1}, {2}},
-    "TimeRange" -> {0, 1},
+    {0, 1},
     "TargetGridSizePerStep" -> 9
   ][],
   "Error: No zero-crossing detected for at least one observable",
@@ -119,7 +120,7 @@ VerificationTest[
     {},
     {u, v},
     {{-1, -1}, {1, 1}},
-    "TimeRange" -> {0, 1},
+    {0, 1},
     "TuningObservables" -> {
       u[t]^2 + v[t]^2 - 1/10,
       (u[t] - 4/5)^2 + v[t]^2 - 1/10
@@ -144,7 +145,7 @@ VerificationTest[
         {},
         {m},
         {{0.0}, {1.0}},
-        "TimeRange" -> {0, 1},
+        {0, 1},
         "TuningObservables" -> {m[t] - 1/2},
         "TargetGridSizePerStep" -> 2,
         WorkingPrecision -> 40
@@ -169,7 +170,7 @@ VerificationTest[
         {},
         {m},
         {{0}, {1}},
-        "TimeRange" -> {0, 1},
+        {0, 1},
         "TuningObservables" -> {m[t] - 1/2},
         "TargetGridSizePerStep" -> 2,
         WorkingPrecision -> 40
@@ -193,7 +194,7 @@ VerificationTest[
       {},
       {m},
       {{0}, {1}},
-      "TimeRange" -> {0, 1},
+      {0, 1},
       "TuningObservables" -> {m[t] - 1/2},
       "TargetGridSizePerStep" -> 2,
       "RelativeTolerance" -> 0.1,
@@ -207,7 +208,7 @@ VerificationTest[
   ],
   {True, True, True},
   SameTest -> SameQ,
-  TestID -> "AdaptiveGridSearch-1d-brackets-endpoint-scan-root"
+  TestID -> "AdaptiveGridSearch-1d-brackets-endpoints"
 ]
 
 VerificationTest[
@@ -218,7 +219,55 @@ VerificationTest[
       {},
       {m},
       {{0}, {1}},
-      "TimeRange" -> {0, 1},
+      {0, 1},
+      "TuningObservables" -> {m[t] - 1/3},
+      "TargetGridSizePerStep" -> 9,
+      "MultipleZeroCrossingsCheck1D" -> True,
+      "RelativeTolerance" -> 0.2,
+      WorkingPrecision -> 30
+    ][];
+    {
+      Abs[result[[1, 1]] - 1/3] < 0.05,
+      0 < result[[2, 1]] < 0.1
+    }
+  ],
+  {True, True},
+  SameTest -> SameQ,
+  TestID -> "AdaptiveGridSearch-1d-multiple-crossing-check-single-root"
+]
+
+VerificationTest[
+  Module[{result},
+    result = ToString @ AdaptiveGridSearch[
+      {m'[t] == 0},
+      {},
+      {},
+      {m},
+      {{-1}, {1}},
+      {0, 1},
+      "TuningObservables" -> {(m[t] - 1/2) (m[t] + 1/2)},
+      "TargetGridSizePerStep" -> 9,
+      "MultipleZeroCrossingsCheck1D" -> True,
+      WorkingPrecision -> 30
+    ][];
+    StringContainsQ[result, "Detected 2 candidate zero crossings"] &&
+    StringContainsQ[result, "Candidate brackets:"] &&
+    StringContainsQ[result, "Choose one bracket as the new tuning corridor and rerun with that."]
+  ],
+  True,
+  SameTest -> SameQ,
+  TestID -> "AdaptiveGridSearch-1d-multiple-crossing-check-reports-brackets"
+]
+
+VerificationTest[
+  Module[{result},
+    result = AdaptiveGridSearch[
+      {m'[t] == 0},
+      {},
+      {},
+      {m},
+      {{0}, {1}},
+      {0, 1},
       "TuningObservables" -> {m[t] - 1/3},
       "TargetGridSizePerStep" -> 9,
       "RelativeTolerance" -> 0.2,
@@ -243,7 +292,7 @@ VerificationTest[
       {},
       {m},
       {{0}, {1}},
-      "TimeRange" -> {0, 1},
+      {0, 1},
       "TuningObservables" -> {m[t] - 1/3},
       "TargetGridSizePerStep" -> 2,
       "RelativeTolerance" -> 0.02,
@@ -272,7 +321,7 @@ VerificationTest[
       },
       {m},
       {{0}, {1}},
-      "TimeRange" -> {0, 1},
+      {0, 1},
       "TuningObservables" -> {m[t] - a/2},
       "TargetGridSizePerStep" -> 9,
       "RelativeTolerance" -> 0.2,
@@ -293,7 +342,7 @@ VerificationTest[
       {},
       {m},
       {{0}, {1}},
-      "TimeRange" -> {0, 1},
+      {0, 1},
       "TuningObservables" -> {m[t] - 1/3},
       "TargetGridSizePerStep" -> 9,
       "RelativeTolerance" -> 0.2,
@@ -315,7 +364,7 @@ VerificationTest[
       {},
       {m},
       {{0}, {1}},
-      "TimeRange" -> {0, 1},
+      {0, 1},
       "TuningObservables" -> {m[t] - 1/3},
       "TargetGridSizePerStep" -> 9,
       "RelativeTolerance" -> 0.2,
@@ -337,7 +386,7 @@ VerificationTest[
       {},
       {m},
       {{0}, {1}},
-      "TimeRange" -> {0, 2},
+      {0, 2},
       "TuningObservables" -> {m[t] - 7/10},
       "TargetGridSizePerStep" -> 9,
       "RelativeTolerance" -> 0.2,
@@ -363,8 +412,8 @@ VerificationTest[
     {},
     {u, v},
     {{-1, -1}, {1, 1}},
+    {0, 1},
     "TimeVariable" -> s,
-    "TimeRange" -> {0, 1},
     "TuningObservables" -> {u[s] - 1/3, v[s] - 2/3},
     "TargetGridSizePerStep" -> 9,
     "RelativeTolerance" -> 0.2,
@@ -386,8 +435,8 @@ VerificationTest[
       {},
       {u, v},
       {{0, 0}, {1, 1}},
+      {0, 1},
       "TimeVariable" -> s,
-      "TimeRange" -> {0, 1},
       "TuningObservables" -> {u[s] - 1/3, v[s] - 2/3},
       "TargetGridSizePerStep" -> 9,
       "RelativeTolerance" -> 0.2,
@@ -411,7 +460,7 @@ VerificationTest[
       {},
       {u, v},
       {{0, 0}, {1, 1}},
-      "TimeRange" -> {0, 1},
+      {0, 1},
       "TargetGridSizePerStep" -> 9,
       "RelativeTolerance" -> 0.2,
       WorkingPrecision -> 30
@@ -432,7 +481,7 @@ VerificationTest[
         {},
         {u},
         {{0}, {1}},
-        "TimeRange" -> {0, 1},
+        {0, 1},
         "VerbosePlot" -> True
       ][],
       "plot2d",

@@ -11,7 +11,7 @@ search = AdaptiveGridSearch[
   },
   {m},
   {{-2}, {2}},
-  "TimeRange" -> {0, 10}
+  {0, 10}
 ];
 
 result = search[];
